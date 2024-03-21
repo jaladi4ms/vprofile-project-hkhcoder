@@ -21,6 +21,7 @@ pipeline {
         NEXUS_LOGIN = 'nexuslogin'
         SONARSERVER = 'sonarserver'
         SONARSCANNER = 'sonarscanner'
+		NEXUSPASS = credentials('nexuspass')									
     }
 
     stages {
@@ -35,6 +36,7 @@ pipeline {
                 }
             }
         }
+
         stage('Test'){
             steps {
                 sh 'mvn -s settings.xml test'
@@ -47,6 +49,7 @@ pipeline {
                 sh 'mvn -s settings.xml checkstyle:checkstyle'
             }
         }
+
          stage('Sonar Analysis') {
             environment {
                 scannerHome = tool "${SONARSCANNER}"
@@ -74,6 +77,7 @@ pipeline {
                 }
             }
         }  
+
         stage("UploadArtifact"){
             steps{
                 nexusArtifactUploader(
@@ -93,6 +97,31 @@ pipeline {
                 )
             }
         }
+
+        stage('Ansible Deploy to staging'){
+            steps {
+                ansiblePlaybook([
+                inventory   : 'ansible/stage.inventory',
+                playbook    : 'ansible/site.yml',
+                installation: 'ansible',
+                colorized   : true,
+			    credentialsId: 'applogin',
+			    disableHostKeyChecking: true,
+                extraVars   : [
+                   	USER: "admin",
+                    PASS: "${NEXUSPASS}",
+			        nexusip: "172.31.5.4",
+			        reponame: "vprofile-release",
+			        groupid: "QA",
+			        time: "${env.BUILD_TIMESTAMP}",
+			        build: "${env.BUILD_ID}",
+                    artifactid: "vproapp",
+			        vprofile_version: "vproapp-${env.BUILD_ID}-${env.BUILD_TIMESTAMP}.war"
+                ]
+             ])
+            }
+        }
+
     }
     post {
         always {
